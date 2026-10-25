@@ -1,4 +1,4 @@
-"""40 module cases in Arrange / Act / Assert form."""
+"""40 модульных тест-кейсов в формате Arrange / Act / Assert."""
 
 from tests.support import (
     ATTRIBUTES, DEFAULTS, NUMERIC_PARAMETERS, BatteryEmpty, ChairTestCase,
@@ -9,7 +9,7 @@ from tests.support import (
 
 class FlyingChairModuleTests(ChairTestCase):
     def test_TC_M_001_init_stores_parameters(self):
-        """TC-M-001: construction and initial state."""
+        """TC-M-001: создание кресла и начальное состояние."""
         # Arrange
         parameters = DEFAULTS.copy()
         # Act
@@ -21,7 +21,7 @@ class FlyingChairModuleTests(ChairTestCase):
         self.assert_state(chair, 0, 100, False)
 
     def test_TC_M_002_init_empty_name_raises(self):
-        """TC-M-002: empty name."""
+        """TC-M-002: пустое имя."""
         # Arrange
         parameters = DEFAULTS | {"name": ""}
         # Act
@@ -31,7 +31,7 @@ class FlyingChairModuleTests(ChairTestCase):
         self.assert_error(caught.exception, ValueError, "name must not be empty")
 
     def test_TC_M_003_init_nonpositive_parameters_raise(self):
-        """TC-M-003: nonpositive mass, engine power and speed."""
+        """TC-M-003: неположительные масса, мощность двигателей и скорость."""
         for name in NUMERIC_PARAMETERS[:-1]:
             for value in (0, -1):
                 with self.subTest(parameter=name, value=value):
@@ -44,7 +44,13 @@ class FlyingChairModuleTests(ChairTestCase):
                     self.assert_error(caught.exception, ValueError, f"{name} must be positive")
 
     def test_TC_M_004_init_battery_bounds(self):
-        """TC-M-004: inclusive battery boundaries and invalid values."""
+        """TC-M-004: допустимые границы заряда и значения вне диапазона."""
+        # Arrange
+        parameters_without_battery = {name: value for name, value in DEFAULTS.items() if name != "battery"}
+        # Act
+        chair_with_default = FlyingChair(**parameters_without_battery)
+        # Assert
+        self.assertEqual(chair_with_default.battery, 100.0)
         for value in (0, 100, -1, 101):
             with self.subTest(battery=value):
                 # Arrange
@@ -62,7 +68,7 @@ class FlyingChairModuleTests(ChairTestCase):
                     self.assert_error(caught.exception, ValueError, "battery must be between 0 and 100")
 
     def test_TC_M_005_public_attributes_types(self):
-        """TC-M-005: all public attributes and their types."""
+        """TC-M-005: все публичные атрибуты и их типы."""
         # Arrange
         chair = make_chair()
         expected = DEFAULTS | {"position_km": 0.0, "is_flying": False}
@@ -75,7 +81,7 @@ class FlyingChairModuleTests(ChairTestCase):
                 self.assertIs(type(value), str if name == "name" else bool if name == "is_flying" else float)
 
     def test_TC_M_006_public_attributes_read_only(self):
-        """TC-M-006: direct assignment is rejected."""
+        """TC-M-006: прямое присваивание атрибутам отклоняется."""
         for name in ATTRIBUTES:
             with self.subTest(attribute=name):
                 # Arrange
@@ -89,7 +95,7 @@ class FlyingChairModuleTests(ChairTestCase):
                 self.assertEqual(snapshot(chair), before)
 
     def test_TC_M_007_move_air(self):
-        """TC-M-007: flight time, cost and state."""
+        """TC-M-007: время полёта, расход заряда и состояние."""
         # Arrange
         chair = make_chair()
         # Act
@@ -99,7 +105,7 @@ class FlyingChairModuleTests(ChairTestCase):
         self.assert_state(chair, 30, 40, True)
 
     def test_TC_M_008_move_water(self):
-        """TC-M-008: half speed in water."""
+        """TC-M-008: скорость в воде вдвое ниже воздушной."""
         # Arrange
         chair = make_chair()
         # Act
@@ -109,19 +115,22 @@ class FlyingChairModuleTests(ChairTestCase):
         self.assert_state(chair, 6, 94, False)
 
     def test_TC_M_009_move_ground_raises(self):
-        """TC-M-009: ground movement raises a domain exception."""
-        # Arrange
-        chair = make_chair()
-        before = snapshot(chair)
-        # Act
-        with self.assertRaises(FlyingChairCannotMoveOnGround) as caught:
-            chair.move(1, "ground")
-        # Assert
-        self.assert_error(caught.exception, FlyingChairCannotMoveOnGround, "flying chair cannot move on ground")
-        self.assertEqual(snapshot(chair), before)
+        """TC-M-009: движение и расчёт на земле вызывают доменное исключение."""
+        for method in ("move", "calculate_energy"):
+            with self.subTest(method=method):
+                # Arrange
+                chair = make_chair()
+                before = snapshot(chair)
+                # Act
+                with self.assertRaises(FlyingChairCannotMoveOnGround) as caught:
+                    getattr(chair, method)(1, "ground")
+                # Assert
+                self.assert_error(caught.exception, FlyingChairCannotMoveOnGround,
+                                  "flying chair cannot move on ground")
+                self.assertEqual(snapshot(chair), before)
 
     def test_TC_M_010_move_insufficient_battery_raises(self):
-        """TC-M-010: insufficient positive battery."""
+        """TC-M-010: положительный заряд недостаточен для перемещения."""
         for distance, terrain, cost in ((30, "air", 60), (11, "water", 11)):
             with self.subTest(terrain=terrain):
                 # Arrange
@@ -135,7 +144,7 @@ class FlyingChairModuleTests(ChairTestCase):
                 self.assertEqual(snapshot(chair), before)
 
     def test_TC_M_011_move_exact_battery_succeeds(self):
-        """TC-M-011: a route may consume the whole battery."""
+        """TC-M-011: маршрут может израсходовать весь заряд батареи."""
         for distance, terrain, speed in ((10, "air", 150), (20, "water", 75)):
             with self.subTest(terrain=terrain):
                 # Arrange
@@ -145,9 +154,17 @@ class FlyingChairModuleTests(ChairTestCase):
                 # Assert
                 self.assert_time(time, distance / speed)
                 self.assert_state(chair, distance, 0, terrain == "air")
+        # Arrange
+        chair = make_chair(battery=0.3)
+        # Act
+        times = [chair.move(0.1, "water") for _ in range(3)]
+        # Assert
+        for time in times:
+            self.assert_time(time, 0.1 / 75)
+        self.assert_state(chair, 0.3, 0.0, False)
 
     def test_TC_M_012_move_error_preserves_state(self):
-        """TC-M-012: failed moves preserve a flying chair's state."""
+        """TC-M-012: неудачные перемещения сохраняют состояние кресла в полёте."""
         variants = ((50, "air", BatteryEmpty), (1, "ground", FlyingChairCannotMoveOnGround),
                     (0, "air", ValueError), (1, "lava", ValueError))
         for distance, terrain, error in variants:
@@ -165,7 +182,7 @@ class FlyingChairModuleTests(ChairTestCase):
                 self.assert_state(chair, 5, 90, True)
 
     def test_TC_M_013_distance_nonpositive_raises(self):
-        """TC-M-013: invalid distances in move and calculation."""
+        """TC-M-013: недопустимые расстояния при движении и расчёте расхода."""
         for method in ("move", "calculate_energy"):
             for distance in (0, -1):
                 with self.subTest(method=method, distance=distance):
@@ -180,7 +197,7 @@ class FlyingChairModuleTests(ChairTestCase):
                     self.assertEqual(snapshot(chair), before)
 
     def test_TC_M_014_unknown_terrain_raises(self):
-        """TC-M-014: unknown terrain."""
+        """TC-M-014: неизвестная среда."""
         for method in ("move", "calculate_energy"):
             with self.subTest(method=method):
                 # Arrange
@@ -194,7 +211,7 @@ class FlyingChairModuleTests(ChairTestCase):
                 self.assertEqual(snapshot(chair), before)
 
     def test_TC_M_015_overcome_wall_requires_flight(self):
-        """TC-M-015: wall on ground, in air and in water."""
+        """TC-M-015: преодоление стены с земли, из воздуха и из воды."""
         for terrain, expected in ((None, False), ("air", True), ("water", False)):
             with self.subTest(terrain=terrain):
                 # Arrange
@@ -207,7 +224,7 @@ class FlyingChairModuleTests(ChairTestCase):
                 self.assertIs(result, expected)
 
     def test_TC_M_016_overcome_river_in_water(self):
-        """TC-M-016: being in water is enough at charge 0 or 20."""
+        """TC-M-016: нахождения в воде достаточно при заряде 0 или 20."""
         for battery in (1.0, 21.0):
             with self.subTest(battery=battery):
                 # Arrange
@@ -220,7 +237,7 @@ class FlyingChairModuleTests(ChairTestCase):
                 self.assertEqual(chair.battery, battery - 1)
 
     def test_TC_M_017_overcome_river_battery_threshold(self):
-        """TC-M-017: outside water battery must exceed 20."""
+        """TC-M-017: вне воды заряд должен превышать 20."""
         for battery, expected in ((0.0, False), (20.0, False), (21.0, True)):
             with self.subTest(battery=battery):
                 # Arrange
@@ -231,18 +248,19 @@ class FlyingChairModuleTests(ChairTestCase):
                 self.assertIs(result, expected)
 
     def test_TC_M_018_overcome_tree_power_threshold(self):
-        """TC-M-018: strict engine power threshold for trees."""
-        for power, expected in ((1.5, False), (2.0, False), (2.1, True)):
-            with self.subTest(power=power):
+        """TC-M-018: строгий порог мощности двигателя для преодоления дерева."""
+        for mass, power, expected in ((1.0, 1.5, False), (1.0, 2.0, False),
+                                      (1.2, 2.2, False), (1.0, 2.1, True)):
+            with self.subTest(mass=mass, power=power):
                 # Arrange
-                chair = make_chair(mass_kg=1.0, vert_engine_power=power)
+                chair = make_chair(mass_kg=mass, vert_engine_power=power)
                 # Act
                 result = chair.can_overcome("tree")
                 # Assert
                 self.assertIs(result, expected)
 
     def test_TC_M_019_overcome_mountain_thresholds(self):
-        """TC-M-019: both mountain thresholds must hold."""
+        """TC-M-019: оба пороговых условия для горы должны выполняться."""
         for power, battery, expected in ((2.0, 100.0, False), (2.3, 100.0, False),
                                          (2.4, 50.0, False), (2.4, 51.0, True)):
             with self.subTest(power=power, battery=battery):
@@ -254,19 +272,21 @@ class FlyingChairModuleTests(ChairTestCase):
                 self.assertIs(result, expected)
 
     def test_TC_M_020_can_overcome_returns_bool(self):
-        """TC-M-020: known obstacles return a bool, including False."""
+        """TC-M-020: проверка известных препятствий возвращает bool, включая False."""
         for obstacle, expected in (("wall", False), ("river", True), ("tree", True), ("mountain", True)):
             with self.subTest(obstacle=obstacle):
                 # Arrange
                 chair = make_chair()
+                before = snapshot(chair)
                 # Act
                 result = chair.can_overcome(obstacle)
                 # Assert
                 self.assertIs(type(result), bool)
                 self.assertIs(result, expected)
+                self.assertEqual(snapshot(chair), before)
 
     def test_TC_M_021_unknown_obstacle_raises(self):
-        """TC-M-021: unknown obstacle is a validation error."""
+        """TC-M-021: неизвестное препятствие вызывает ошибку валидации."""
         # Arrange
         chair = make_chair()
         before = snapshot(chair)
@@ -278,7 +298,7 @@ class FlyingChairModuleTests(ChairTestCase):
         self.assertEqual(snapshot(chair), before)
 
     def test_TC_M_022_calculate_energy_matches_move_cost(self):
-        """TC-M-022: energy formulas and float return type."""
+        """TC-M-022: формулы расхода энергии и возвращаемый тип float."""
         for terrain, expected in (("air", 6.0), ("water", 3.0)):
             with self.subTest(terrain=terrain):
                 # Arrange
@@ -288,9 +308,19 @@ class FlyingChairModuleTests(ChairTestCase):
                 # Assert
                 self.assertIs(type(result), float)
                 self.assertAlmostEqual(result, expected, delta=1e-9)
+        # Arrange
+        chair = make_chair()
+        before = snapshot(chair)
+        # Act
+        with self.assertRaises(FlyingChairCannotMoveOnGround) as caught:
+            chair.calculate_energy(3, "ground")
+        # Assert
+        self.assert_error(caught.exception, FlyingChairCannotMoveOnGround,
+                          "flying chair cannot move on ground")
+        self.assertEqual(snapshot(chair), before)
 
     def test_TC_M_023_calculate_energy_preserves_state(self):
-        """TC-M-023: calculation does not mutate a flying chair."""
+        """TC-M-023: расчёт не меняет состояние кресла в полёте."""
         # Arrange
         chair = make_chair()
         chair.move(5, "air")
@@ -302,7 +332,7 @@ class FlyingChairModuleTests(ChairTestCase):
         self.assertEqual(snapshot(chair), before)
 
     def test_TC_M_024_calculate_energy_independent_of_battery(self):
-        """TC-M-024: calculation works without enough battery."""
+        """TC-M-024: расчёт работает при недостаточном заряде батареи."""
         for battery in (0.0, 1.0):
             for terrain, expected in (("air", 60.0), ("water", 30.0)):
                 with self.subTest(battery=battery, terrain=terrain):
@@ -317,7 +347,7 @@ class FlyingChairModuleTests(ChairTestCase):
                     self.assertEqual(snapshot(chair), before)
 
     def test_TC_M_025_recharge_adds_battery(self):
-        """TC-M-025: normal recharge returns None."""
+        """TC-M-025: обычная зарядка возвращает None."""
         # Arrange
         chair = make_chair(battery=20.0)
         # Act
@@ -327,17 +357,19 @@ class FlyingChairModuleTests(ChairTestCase):
         self.assertEqual(chair.battery, 70)
 
     def test_TC_M_026_recharge_caps_at_100(self):
-        """TC-M-026: excessive recharge is capped."""
-        # Arrange
-        chair = make_chair(battery=50.0)
-        # Act
-        result = chair.recharge(1000)
-        # Assert
-        self.assertIsNone(result)
-        self.assertEqual(chair.battery, 100)
+        """TC-M-026: избыточная зарядка ограничивается максимальным значением."""
+        for amount in (50, 1000):
+            with self.subTest(amount=amount):
+                # Arrange
+                chair = make_chair(battery=50.0)
+                # Act
+                result = chair.recharge(amount)
+                # Assert
+                self.assertIsNone(result)
+                self.assertEqual(chair.battery, 100)
 
     def test_TC_M_027_recharge_nonpositive_raises(self):
-        """TC-M-027: recharge amount must be positive."""
+        """TC-M-027: величина зарядки должна быть положительной."""
         for amount in (0, -1):
             with self.subTest(amount=amount):
                 # Arrange
@@ -351,7 +383,7 @@ class FlyingChairModuleTests(ChairTestCase):
                 self.assertEqual(snapshot(chair), before)
 
     def test_TC_M_028_recharge_preserves_position_and_flight(self):
-        """TC-M-028: recharge only changes battery."""
+        """TC-M-028: зарядка меняет только заряд батареи."""
         # Arrange
         chair = make_chair()
         chair.move(5, "air")
@@ -362,11 +394,12 @@ class FlyingChairModuleTests(ChairTestCase):
         self.assertEqual(snapshot(chair), before | {"battery": 95.0})
 
     def test_TC_M_029_status_keys_types_and_values(self):
-        """TC-M-029: status has exactly six documented keys."""
+        """TC-M-029: состояние содержит ровно восемь ключей из ТЗ."""
         # Arrange
         chair = make_chair()
-        expected = dict(name="Царь", battery=100.0, position_km=0.0,
-                        is_flying=False, vert_engine_power=82.0, horizont_engine_power=50.0)
+        expected = dict(name="Царь", mass_kg=80.0, battery=100.0, position_km=0.0,
+                        is_flying=False, vert_engine_power=82.0,
+                        horizont_engine_power=50.0, max_speed_kmh=150.0)
         # Act
         status = chair.get_status()
         # Assert
@@ -376,7 +409,7 @@ class FlyingChairModuleTests(ChairTestCase):
             self.assertIs(type(value), type(expected[name]))
 
     def test_TC_M_030_status_is_snapshot(self):
-        """TC-M-030: mutating a returned dict does not mutate the chair."""
+        """TC-M-030: изменение возвращённого словаря не меняет состояние кресла."""
         # Arrange
         chair = make_chair()
         before = snapshot(chair)
@@ -390,7 +423,7 @@ class FlyingChairModuleTests(ChairTestCase):
         self.assertEqual(chair.get_status()["name"], "Царь")
 
     def test_TC_M_031_invalid_string_parameter_types_raise(self):
-        """TC-M-031: invalid name, terrain and obstacle types."""
+        """TC-M-031: недопустимые типы имени, среды и препятствия."""
         for value in (1, None):
             for method, parameter in (("init", "name"), ("move", "terrain"),
                                       ("calculate_energy", "terrain"), ("can_overcome", "obstacle")):
@@ -411,7 +444,7 @@ class FlyingChairModuleTests(ChairTestCase):
                     self.assertEqual(snapshot(chair), before)
 
     def test_TC_M_032_invalid_numeric_parameter_types_raise(self):
-        """TC-M-032: nonnumeric values and bool are rejected."""
+        """TC-M-032: нечисловые значения и bool отклоняются."""
         targets = [("init", parameter) for parameter in NUMERIC_PARAMETERS]
         targets += [("move", "distance_km"), ("calculate_energy", "distance_km"), ("recharge", "amount")]
         for value in ("1", None, True, False):
@@ -433,7 +466,7 @@ class FlyingChairModuleTests(ChairTestCase):
                     self.assertEqual(snapshot(chair), before)
 
     def test_TC_M_033_exception_hierarchy(self):
-        """TC-M-033: domain exception hierarchy from SPEC 6.1."""
+        """TC-M-033: иерархия доменных исключений из раздела 6.1 SPEC."""
         # Arrange
         pairs = ((CrazyVehicleError, RuntimeError), (FlyingChairError, CrazyVehicleError),
                  (BatteryEmpty, FlyingChairError), (FlyingChairCannotMoveOnGround, FlyingChairError))
@@ -447,7 +480,7 @@ class FlyingChairModuleTests(ChairTestCase):
             self.assertIsInstance(error, RuntimeError)
 
     def test_TC_M_034_exception_messages(self):
-        """TC-M-034: messages for every row of SPEC 6.2."""
+        """TC-M-034: сообщения для каждой строки таблицы раздела 6.2 SPEC."""
         variants = [("init", {"name": ""}, (), ValueError, "name must not be empty")]
         variants += [("init", {name: 0}, (), ValueError, f"{name} must be positive")
                      for name in NUMERIC_PARAMETERS[:-1]]
@@ -486,9 +519,10 @@ class FlyingChairModuleTests(ChairTestCase):
         self.assertEqual(snapshot(chair), before)
 
     def test_TC_M_035_validation_order_and_state(self):
-        """TC-M-035: input checks precede ground and battery checks."""
+        """TC-M-035: валидация входов предшествует проверкам среды и заряда."""
         for distance, terrain, error in (("1", "ground", TypeError), (0, "ground", ValueError),
-                                         (1, "lava", ValueError), (1, "ground", FlyingChairCannotMoveOnGround)):
+                                         (1, "lava", ValueError), (1, "ground", FlyingChairCannotMoveOnGround),
+                                         (0, 1, ValueError)):
             with self.subTest(distance=distance, terrain=terrain):
                 # Arrange
                 chair = make_chair(battery=0.0)
@@ -499,9 +533,16 @@ class FlyingChairModuleTests(ChairTestCase):
                 # Assert
                 self.assertIs(type(caught.exception), error)
                 self.assertEqual(snapshot(chair), before)
+        # Arrange
+        parameters = DEFAULTS | {"name": "", "mass_kg": -1}
+        # Act
+        with self.assertRaises(ValueError) as caught:
+            FlyingChair(**parameters)
+        # Assert
+        self.assert_error(caught.exception, ValueError, "name must not be empty")
 
     def test_TC_M_036_move_empty_battery_raises(self):
-        """TC-M-036: empty battery prevents air and water movement."""
+        """TC-M-036: разряженная батарея запрещает движение в воздухе и воде."""
         for terrain, cost in (("air", 2), ("water", 1)):
             with self.subTest(terrain=terrain):
                 # Arrange
@@ -515,7 +556,7 @@ class FlyingChairModuleTests(ChairTestCase):
                 self.assertEqual(snapshot(chair), before)
 
     def test_TC_M_037_move_fractional_distance(self):
-        """TC-M-037: fractional distances are not rounded away."""
+        """TC-M-037: дробные расстояния учитываются без округления."""
         for terrain, speed, battery in (("air", 150, 99), ("water", 75, 99.5)):
             with self.subTest(terrain=terrain):
                 # Arrange
@@ -527,7 +568,7 @@ class FlyingChairModuleTests(ChairTestCase):
                 self.assert_state(chair, 0.5, battery, terrain == "air")
 
     def test_TC_M_038_recharge_full_battery(self):
-        """TC-M-038: recharge of a full battery is successful and capped."""
+        """TC-M-038: зарядка полной батареи успешна и не превышает лимит."""
         # Arrange
         chair = make_chair()
         # Act
@@ -537,7 +578,7 @@ class FlyingChairModuleTests(ChairTestCase):
         self.assert_state(chair, 0, 100, False)
 
     def test_TC_M_039_numeric_int_and_float_accepted(self):
-        """TC-M-039: both allowed numeric types work in constructor and methods."""
+        """TC-M-039: оба допустимых числовых типа работают в конструкторе и методах."""
         for numeric_type in (int, float):
             for method in ("move", "calculate_energy", "recharge"):
                 with self.subTest(numeric_type=numeric_type, method=method):
@@ -567,7 +608,7 @@ class FlyingChairModuleTests(ChairTestCase):
                         self.assert_state(chair, 0, 100, False)
 
     def test_TC_M_040_move_switches_flight_state(self):
-        """TC-M-040: switching medium updates is_flying."""
+        """TC-M-040: смена среды обновляет is_flying."""
         for first, second in (("air", "water"), ("water", "air")):
             with self.subTest(first=first, second=second):
                 # Arrange

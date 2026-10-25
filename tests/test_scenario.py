@@ -115,8 +115,10 @@ class FlyingChairScenarioTests(ChairTestCase):
         # When: запрос финального состояния.
         status = pilot.status()
         # Then
-        self.assertEqual(status, dict(name="Царь", battery=40.0, position_km=40.0,
-                                     is_flying=True, vert_engine_power=82.0, horizont_engine_power=50.0))
+        self.assertEqual(status, dict(name="Царь", mass_kg=80.0, battery=40.0,
+                                     position_km=40.0, is_flying=True,
+                                     vert_engine_power=82.0, horizont_engine_power=50.0,
+                                     max_speed_kmh=150.0))
 
     def test_TC_S_004_accumulated_route(self):
         """TC-S-004: накопление расстояния и смена среды на последовательных участках."""
@@ -291,8 +293,10 @@ class FlyingChairScenarioTests(ChairTestCase):
         # When
         new_status = pilot.status()
         # Then
-        self.assertEqual(old_status, dict(name="Царь", battery=40.0, position_km=0.0,
-                                         is_flying=False, vert_engine_power=82.0, horizont_engine_power=50.0))
+        self.assertEqual(old_status, dict(name="Царь", mass_kg=80.0, battery=40.0,
+                                         position_km=0.0, is_flying=False,
+                                         vert_engine_power=82.0, horizont_engine_power=50.0,
+                                         max_speed_kmh=150.0))
         self.assertEqual(new_status, old_status | {"battery": 15.0, "position_km": 15.0})
         self.assertIsNot(new_status, old_status)
 
